@@ -36,6 +36,7 @@ export default function AudioProvider({ children }) {
   const pathname = usePathname();
   const currentMusicUrl = useMemo(() => {
     if (!pathname) return "/audio/bgm.mp3";
+    if (pathname.startsWith("/game/map")) return null; // pop-out map tab: the game tab already plays music
     if (pathname === "/" || pathname.startsWith("/home")) return "/audio/home.mp3";
     if (pathname.startsWith("/login")) return "/audio/login.mp3";
     if (pathname.startsWith("/lobby")) return "/audio/lobby.mp3";
@@ -100,7 +101,7 @@ export default function AudioProvider({ children }) {
   const startMusic = useCallback(() => {
     ensureAudio();
     const ctx = audioCtxRef.current;
-    if (!ctx) return;
+    if (!ctx || !currentMusicUrl) return;
     try {
       if (!musicElRef.current) {
         const el = new Audio();
@@ -163,6 +164,7 @@ export default function AudioProvider({ children }) {
     const ctx = audioCtxRef.current;
     if (!el || !ctx) return;
     try {
+      if (!currentMusicUrl) { el.pause(); return; }
       if (el.src && el.src.endsWith(currentMusicUrl)) return;
       el.pause();
       el.src = currentMusicUrl;

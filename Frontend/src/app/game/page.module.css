@@ -14,6 +14,24 @@
     padding: 0px;
 }
 
+/* Street View on the left, guess panel on the right. Dragging to look around
+   shouldn't highlight button or overlay text. */
+.umbrella {
+    display: flex;
+    flex-direction: row;
+    width: 100vw;
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.streetViewArea {
+    position: relative;
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 100vh;
+}
+
 html,
 body {
     height: 100%;
@@ -90,15 +108,208 @@ body {
     top: 0px;
 }
 
-#guessOverlay {
-    position: absolute;
-    bottom: 0;
-    z-index: 2;
+/* Guess panel: sits beside Street View instead of on top of it */
+.guessPanel {
+    flex: 0 0 auto;
+    width: 300px;
+    height: 100vh;
+    box-sizing: border-box;
+    padding: 12px;
+    background-color: var(--darkerblue);
     display: flex;
     flex-direction: column;
-    right: 0px;
-    margin: 15px;
-    margin-bottom: 10px;
+    justify-content: center;
+    gap: 10px;
+    font-family: "Baloo 2";
+}
+
+.guessPanelExpanded {
+    width: 520px;
+}
+
+.guessPanelTitle {
+    font-size: 24px;
+    font-weight: 700;
+    text-align: center;
+}
+
+.guessMapCanvas {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    /* leave room for the title, toggle and buttons so nothing goes off screen */
+    max-height: calc(100vh - 260px);
+    border-radius: 10px;
+    overflow: hidden;
+    background-color: #13294b;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.guessPanelActions {
+    display: flex;
+    gap: 8px;
+}
+
+.guessPanel button {
+    font-family: "Baloo 2";
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.guessPanelSmallButton {
+    flex: 1;
+    height: 34px;
+    font-size: 16px;
+    background-color: var(--darkblue);
+    color: white;
+}
+
+.guessPanelSmallButton:hover {
+    background-color: var(--darkblueHover);
+}
+
+.guessSubmitButton {
+    height: 44px;
+    font-size: 25px;
+    background-color: var(--burntorange);
+    color: var(--darkblue);
+}
+
+.guessSubmitButton:hover {
+    background-color: var(--burntorangeHover);
+}
+
+/* Guess map controls (side panel and pop-out tab) */
+.guessMapWrap {
+    position: relative;
+}
+
+.mapModeToggle {
+    display: flex;
+    background-color: var(--darkblue);
+    border-radius: 10px;
+    padding: 3px;
+    gap: 3px;
+}
+
+.mapModeToggle button {
+    flex: 1;
+    height: 34px;
+    font-family: "Baloo 2";
+    font-size: 16px;
+    font-weight: 600;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    background-color: transparent;
+    color: white;
+}
+
+.mapModeToggle button:hover {
+    background-color: var(--darkblueHover);
+}
+
+.mapModeToggle button.mapModeActive {
+    background-color: var(--burntorange);
+    color: var(--darkerblue);
+}
+
+.mapModeHint {
+    font-size: 15px;
+    text-align: center;
+    opacity: 0.85;
+    margin-top: -4px;
+}
+
+.mapZoomButtons {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    z-index: 1;
+}
+
+.mapZoomButtons button {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    font-family: "Baloo 2";
+    font-size: 24px;
+    font-weight: 700;
+    line-height: 1;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    background-color: #13294b;
+    color: white;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+.mapZoomButtons button:hover {
+    background-color: #1e3a6b;
+}
+
+.guessPanel button.mapSizeButton {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    z-index: 1;
+    height: 30px;
+    padding: 0 10px;
+    font-size: 14px;
+    border-radius: 8px;
+    background-color: #13294b;
+    color: white;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+.guessPanel button.mapSizeButton:hover {
+    background-color: #1e3a6b;
+}
+
+/* Pop-out map tab (/game/map) */
+.popoutMap {
+    font-family: "Baloo 2";
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background-color: var(--darkerblue);
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.popoutHeader {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+    padding: 10px 16px;
+}
+
+.popoutHeader .mapModeToggle {
+    width: 320px;
+}
+
+.popoutStatus {
+    font-size: 20px;
+    font-weight: 600;
+}
+
+.popoutMapWrap {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.popoutMapCanvas {
+    flex: 1;
+    width: 100%;
 }
 
 #controlsOverlay {
@@ -138,8 +349,7 @@ body {
     background-color: #1e3a6b;
 }
 
-#scoreScreen button,
-#guessOverlay button {
+#scoreScreen button {
     height: 40px;
     font-family: "baloo 2";
     background-color: var(--burntorange);
@@ -154,8 +364,7 @@ body {
     color: white
 }
 
-#scoreScreen button:hover,
-#guessOverlay button:hover {
+#scoreScreen button:hover {
     background-color: var(--burntorangeHover);
 }
 
@@ -166,6 +375,7 @@ body {
 
 
 
+/* Exactly one window tall: the map shrinks to fit, nothing scrolls off screen */
 #scoreScreen {
     position: absolute;
     top: 0;
@@ -174,6 +384,17 @@ body {
     width: 100%;
     height: 100vh;
     border-radius: 0px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-sizing: border-box;
+    padding-bottom: 12px;
+}
+
+#scoreScreen > img {
+    align-self: flex-start;
+    margin: 6px;
+    max-height: 50px !important;
 }
 
 #guessMap {
@@ -187,10 +408,12 @@ body {
 
 
 #scoreBar {
+    flex: 0 0 auto;
     text-align: center;
     display: flex;
     flex-direction: column;
     justify-content: center;
+    gap: 4px;
 }
 
 #scorebar canvas {
@@ -198,19 +421,23 @@ body {
 }
 
 #scoreBar button {
-    margin: auto;
-    width: 400px;
+    margin: 4px auto 0;
+    width: 300px;
+    height: 36px;
+    font-size: 20px;
+    cursor: pointer;
 }
 
 #score {
-    font-size: 50px;
+    font-size: 38px;
     color: white;
     font-weight: bold;
-    line-height: .8;
+    line-height: 1;
 }
 
 #guessInfo {
-    font-size: 30px;
+    font-size: 20px;
+    line-height: 1.2;
 }
 
 #scoringMap {

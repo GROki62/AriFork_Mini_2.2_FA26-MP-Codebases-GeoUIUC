@@ -1,98 +1,96 @@
 "use client"
-import { useRef, useState, useEffect } from 'react'
+import { useRef, useEffect } from 'react'
+import { usePathname } from 'next/navigation'
 
-let pArr = []
-let SNOW_COLLECTING = false
-let SNOW_FALLING = true
+// Number of snowflakes for each Snow setting (Off, Light, Normal, Heavy, Blizzard).
+// Shared with SettingsModal so both stay in sync.
+export const SNOW_LEVEL_COUNTS = [0, 40, 80, 140, 220]
+const DEFAULT_SNOW_LEVEL = 2
+const FLAKE_SIZE = 6       // drawn size in px
+const MAX_FALL_SPEED = 3
+const MAX_DRIFT = 1.5
+const SETTINGS_CHECK_FRAMES = 30 // re-read the Snow setting about twice a second
+
+function readSnowCount() {
+    try {
+        const lvl = parseInt(localStorage.getItem("snowLevel"), 10)
+        if (!Number.isNaN(lvl)) return SNOW_LEVEL_COUNTS[Math.max(0, Math.min(4, lvl))]
+    } catch { }
+    return SNOW_LEVEL_COUNTS[DEFAULT_SNOW_LEVEL]
+}
+
+function newFlake(width, height, anywhere) {
+    return {
+        x: Math.random() * width,
+        y: anywhere ? Math.random() * height : -FLAKE_SIZE,
+        vy: Math.random() * MAX_FALL_SPEED * 0.5,
+        vx: 0,
+    }
+}
+
+// Snow only falls on the title screen
 export default function Particles() {
-    const [ticks, setTicks] = useState(0)
-    const particleCanvas = useRef()
-    const snowImgRef = useRef(null)
-    const moundImgRef = useRef(null)
-    let timerInterval
+    const pathname = usePathname()
+    if (pathname !== "/") return null
+    return <Snow />
+}
 
+function Snow() {
+    const canvasRef = useRef(null)
 
     useEffect(() => {
-        // Preload images once
-        if (!snowImgRef.current) {
-            const img = new Image()
-            img.src = "/snow.png"
-            snowImgRef.current = img
-        }
-        if (!moundImgRef.current) {
-            const img2 = new Image()
-            img2.src = "/snowmound.png"
-            moundImgRef.current = img2
-        }
-        timerInterval = setInterval(() => {
-            setTicks(ticks + 1)
-            updateCanvas()
-        }, 30)
-        return () => {
-            clearInterval(timerInterval)
-        }
-    }, [ticks])
+        const canvas = canvasRef.current
+        const ctx = canvas.getContext("2d")
+        const img = new Image()
+        img.src = "/snow.png"
 
-    if (true) { // add like a settings thing for this later maybe or we just don't use it idk
-        if (SNOW_FALLING) { // add like a settings thing for this later maybe or we just don't use it idk
-            return (
-                <canvas
-                    style={{ zIndex: 100, position: "fixed", top: 0, left: 0, pointerEvents: "none" }}
-                    ref={particleCanvas}
-                />
-            )
+        let width = 0
+        let height = 0
+        const resize = () => {
+            width = canvas.width = window.innerWidth
+            height = canvas.height = window.innerHeight
         }
-        return (<></>)
-    }
-    function updateCanvas() {
-        // console.log(ticks)
-        particleCanvas.current["width"] = window.innerWidth
-        particleCanvas.current["height"] = window.innerHeight
-        var scrn = particleCanvas.current.getContext("2d")
-        // scrn.fillRect(0, 0, 100, 100)
-        // console.log(particleCanvas.current)
-        const im = snowImgRef.current
-        if (!im || !im.complete) {
-            return
-        }
-        scrn.clearRect(0, 0, window.innerWidth, window.innerHeight)
-        // scrn.drawImage(im, 0, 0, 15, 15)
-        // Read desired particle count from localStorage; prefer discrete snowLevel
-        let desired = 800
-        try {
-            const lvl = parseInt(localStorage.getItem("snowLevel"), 10)
-            if (!Number.isNaN(lvl)) {
-                const levels = [0, 200, 600, 1200, 2000]
-                desired = levels[Math.max(0, Math.min(4, lvl))]
-            } else {
-                const stored = parseInt(localStorage.getItem("snowParticles"), 10)
-                if (!Number.isNaN(stored)) desired = Math.max(0, Math.min(3000, stored))
-            }
-        } catch {}
-        if (pArr.length < desired) {
-            for (let i = pArr.length; i < desired; i++) {
-                pArr.push([(Math.random(0, 6) * (window.innerWidth + 90) - 100), Math.random() * window.innerHeight, 0, 0])
+        resize()
+        window.addEventListener("resize", resize)
+
+        let flakes = []
+        let desired = readSnowCount()
+        let frame = 0
+        let rafId
+
+        const tick = () => {
+            rafId = requestAnimationFrame(tick)
+            if (++frame % SETTINGS_CHECK_FRAMES === 0) desired = readSnowCount()
+
+            while (flakes.length < desired) flakes.push(newFlake(width, height, true))
+            if (flakes.length > desired) flakes.length = desired
+
+            ctx.clearRect(0, 0, width, height)
+            if (!img.complete || flakes.length === 0) return
+
+            for (const f of flakes) {
+                f.vy = Math.min(MAX_FALL_SPEED, f.vy + Math.random() * 0.1)
+                f.vx = Math.max(-MAX_DRIFT, Math.min(MAX_DRIFT, f.vx + Math.random() * 0.2 - 0.1))
+                f.y += f.vy
+                f.x += f.vx
+                if (f.y > height || f.x < -FLAKE_SIZE || f.x > width) {
+                    Object.assign(f, newFlake(width, height, false))
+                }
+                ctx.drawImage(img, f.x, f.y, FLAKE_SIZE, FLAKE_SIZE)
             }
         }
-        if (pArr.length > desired) {
-            pArr.length = desired
+        rafId = requestAnimationFrame(tick)
+
+        return () => {
+            cancelAnimationFrame(rafId)
+            window.removeEventListener("resize", resize)
         }
-        for (let i = 0; i < pArr.length; i++) {
-            pArr[i][1] += Math.min(pArr[i][2], 5)
-            pArr[i][0] += pArr[i][3]
-            pArr[i][2] += (Math.random()) - .1
-            pArr[i][3] += (Math.random() * .5) - .25
-            scrn.drawImage(im, pArr[i][0], pArr[i][1], 15, 15)
-            if (pArr[i][0] > window.innerWidth || pArr[i][1] > window.innerHeight || pArr[i][0] < -10 || pArr[i][1] < -10) {
-                pArr[i] = [i * Math.random(0, 6) * 10, 0, 0, 0]
-                pArr[i] = [i * Math.random(0, 6) * 10, - 8, 0, 0]
-            }
-        }
-        if (SNOW_COLLECTING) {
-            const im2 = moundImgRef.current
-            if (im2 && im2.complete) {
-                scrn.drawImage(im2, 0, Math.max(-window.innerHeight, 300 - (ticks)))
-            }
-        }
-    }
+    }, [])
+
+    return (
+        <canvas
+            ref={canvasRef}
+            style={{ zIndex: 100, position: "fixed", top: 0, left: 0, pointerEvents: "none", opacity: 0.8 }}
+        />
+    )
 }

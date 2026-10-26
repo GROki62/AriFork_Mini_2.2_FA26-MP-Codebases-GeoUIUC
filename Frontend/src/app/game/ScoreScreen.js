@@ -18,8 +18,9 @@ const SCORE_BAR_COLORS = {
 }
 const MAX_ROUNDS = 3
 const SCORE_BAR_CONFIG = {
-    LINE_WIDTH: 50,
-    LINE_Y: 35,
+    LINE_WIDTH: 28,
+    LINE_Y: 20,
+    CANVAS_HEIGHT: 40,
     LEFT_MARGIN: 0.1,
     RIGHT_MARGIN: 0.9,
     TICK_MULTIPLIER: 3,
@@ -28,6 +29,26 @@ const SCORE_BAR_CONFIG = {
     OFFSET: 30
 }
 const MAX_SCORE = 5000
+const STEPS_PER_FRAME = 4
+// The map takes whatever height is left after the logo and score area,
+// so the whole results screen fits in one window
+const MAP_CONTAINER_STYLE = {
+    width: '75vw',
+    flex: '1 1 auto',
+    minHeight: '200px',
+    alignSelf: 'center',
+    marginBottom: "8px"
+}
+const MAP_OPTIONS = {
+    disableDefaultUI: true,
+    streetViewControl: false,
+    disableDoubleClickZoom: true
+}
+const POLYLINE_OPTIONS = {
+    strokeColor: "#cc860e",
+    strokeOpacity: 0.75,
+    strokeWeight: 4,
+}
 
 export default function ScoreScreen({
     show,
@@ -91,19 +112,10 @@ export default function ScoreScreen({
             />
             {isLoaded && goalPoint && (
                 <GoogleMap
-                    mapContainerStyle={{
-                        width: '75vw',
-                        height: '400px',
-                        marginLeft: "12.5vw",
-                        marginBottom: "10px"
-                    }}
+                    mapContainerStyle={MAP_CONTAINER_STYLE}
                     center={mapCenter}
                     zoom={mapZoom}
-                    options={{
-                        disableDefaultUI: true,
-                        streetViewControl: false,
-                        disableDoubleClickZoom: true
-                    }}
+                    options={MAP_OPTIONS}
                 >
                     <MarkerF
                         position={goalPoint}
@@ -120,11 +132,7 @@ export default function ScoreScreen({
                             <PolylineF
                                 path={[goalPoint, guessPoint]}
                                 // geodesic={true}
-                                options={{
-                                    strokeColor: "#cc860e",
-                                    strokeOpacity: 0.75,
-                                    strokeWeight: 4,
-                                }}
+                                options={POLYLINE_OPTIONS}
                             />
                         </>
                     )}
@@ -135,7 +143,7 @@ export default function ScoreScreen({
                 <div id={styles["score"]}>{score}</div>
                 <canvas
                     id={styles["fillScorebar"]}
-                    height="70"
+                    height={SCORE_BAR_CONFIG.CANVAS_HEIGHT}
                     width={window.innerWidth}
                     ref={scorebarRef}
                 />
@@ -182,7 +190,7 @@ function useScoreBarAnimation(show, score, onComplete) {
         const startX = LEFT_MARGIN * canvasWidth
         const endX = RIGHT_MARGIN * canvasWidth
         ctx.fillStyle = SCORE_BAR_COLORS.background
-        ctx.fillRect(0, 0, canvasWidth, 50)
+        ctx.fillRect(0, 0, canvasWidth, SCORE_BAR_CONFIG.CANVAS_HEIGHT)
 
         ctx.beginPath()
         ctx.lineWidth = LINE_WIDTH
@@ -201,11 +209,15 @@ function useScoreBarAnimation(show, score, onComplete) {
                 return false
             }
 
-            fillTicks += 1 + fillTicksAcc
-            fillTicksAcc += ACCELERATION
+            // Several fill steps per frame keeps the old speed while drawing once per frame
+            for (let s = 0; s < STEPS_PER_FRAME; s++) {
+                fillTicks += 1 + fillTicksAcc
+                fillTicksAcc += ACCELERATION
+            }
+            const drawTicks = Math.min(fillTicks, targetTicks)
 
             ctx.fillStyle = SCORE_BAR_COLORS.background
-            ctx.fillRect(0, 0, canvasWidth, 50)
+            ctx.fillRect(0, 0, canvasWidth, SCORE_BAR_CONFIG.CANVAS_HEIGHT)
 
             ctx.beginPath()
             ctx.lineWidth = LINE_WIDTH
@@ -220,20 +232,20 @@ function useScoreBarAnimation(show, score, onComplete) {
             ctx.strokeStyle = SCORE_BAR_COLORS.fill
             ctx.lineCap = "round"
             ctx.moveTo(startX, LINE_Y)
-            ctx.lineTo(startX + (fillTicks * TICK_MULTIPLIER), LINE_Y)
+            ctx.lineTo(startX + (drawTicks * TICK_MULTIPLIER), LINE_Y)
             ctx.stroke()
 
             return true
         }
 
-        const interval = setInterval(() => {
-            if (!drawFrame()) {
-                clearInterval(interval)
-            }
-        }, 1)
+        let rafId
+        const loop = () => {
+            if (drawFrame()) rafId = requestAnimationFrame(loop)
+        }
+        rafId = requestAnimationFrame(loop)
 
         return () => {
-            clearInterval(interval)
+            cancelAnimationFrame(rafId)
             if (!completed && onComplete) onComplete()
         }
     }, [show, effectiveScore, onComplete])
@@ -268,9 +280,9 @@ function getMapZoom(distance) {
     if (distance > 1) return 14
     return 16
 } function calculateDataURL() {
-    let canvas = document.body.appendChild(document.createElement("canvas"))
+    // Off-screen canvas: it doesn't need to be added to the page to draw on it
+    let canvas = document.createElement("canvas")
     let scrn = canvas.getContext("2d")
-    console.log(im)
 
     canvas.width = 100
     canvas.height = 100
@@ -296,7 +308,6 @@ function getMapZoom(distance) {
     // console.log(canvas)
 
     let dataURL = canvas.toDataURL()
-    console.log(dataURL)
     // console.log(scrn)
     return dataURL
 

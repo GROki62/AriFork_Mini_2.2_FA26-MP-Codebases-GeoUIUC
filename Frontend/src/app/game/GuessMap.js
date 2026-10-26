@@ -1,10 +1,14 @@
 
 "use client"
-import { useRef, useEffect, useCallback, useMemo } from 'react'
+import { useRef, useEffect, useCallback, useState } from 'react'
 import { GoogleMap } from "@react-google-maps/api"
 import styles from "./page.module.css"
+import { MAP_MODES, getMapOptions, MapModeToggle, MapZoomButtons, mapModeHint } from "./GuessMapControls.js"
 const MAP_CENTER = { lat: 40.108252, lng: -88.22699 }
+// Name of the browser tab the "Open in tab" button uses, so repeat clicks reuse one tab
+export const GUESS_MAP_TAB_NAME = "geouiuc-guess-map"
 
+// The guess map sits in its own panel beside Street View, so it never covers the view.
 export default function GuessMap({
     isLoaded,
     userGuess,
@@ -14,102 +18,96 @@ export default function GuessMap({
     onSubmitGuess
 }) {
     const mapInstanceRef = useRef(null)
+    const [mode, setMode] = useState(MAP_MODES.PLACE)
     const { updateMarker } = useMapMarker(mapInstanceRef)
-
-    const mapContainerStyle = useMemo(() => ({
-        width: isExpanded ? '600px' : '400px',
-        height: isExpanded ? '600px' : '400px',
-        marginLeft: "200px",
-        marginBottom: "15px",
-        transition: 'width 0.3s ease, height 0.3s ease'
-    }), [isExpanded])
-
-    const buttonStyle = useMemo(() => ({
-        width: isExpanded ? '600px' : '400px',
-        marginLeft: '200px',
-        float: "right",
-        transition: "0.3s ease"
-    }), [isExpanded])
 
     const handleMapLoad = useCallback((map) => {
         mapInstanceRef.current = map
         map.setCenter(MAP_CENTER)
         map.setZoom(16)
-    }, [])
+        if (userGuess) updateMarker(userGuess)
+    }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+    // Clicks only place a guess in Place mode, and never move or zoom the map
     const handleMapClick = useCallback((e) => {
+        if (mode !== MAP_MODES.PLACE) return
         const position = createPosition(e.latLng.lat(), e.latLng.lng())
-        updateMarker(position, true)
+        updateMarker(position)
         onMapClick(position)
-    }, [updateMarker, onMapClick])
+    }, [mode, updateMarker, onMapClick])
 
     useEffect(() => {
         if (mapInstanceRef.current && userGuess) {
-            updateMarker(userGuess, false)
+            updateMarker(userGuess)
         }
     }, [userGuess, updateMarker])
 
-    useEffect(() => {
-        if (mapInstanceRef.current) {
-            setTimeout(() => {
-                window.google?.maps?.event?.trigger(mapInstanceRef.current, 'resize')
-            }, 50)
-        }
-    }, [isExpanded])
+    const openInTab = useCallback(() => {
+        window.open("/game/map", GUESS_MAP_TAB_NAME)
+    }, [])
 
-    if (!isLoaded) {
-        return (
-            <div id={styles["guessOverlay"]}>
-                <div>Loading map...</div>
-                <button onClick={onSubmitGuess}>Submit guess!</button>
-            </div>
-        )
-    }
+    const panelClass = `${styles.guessPanel} ${isExpanded ? styles.guessPanelExpanded : ""}`
 
     return (
-        <div id={styles["guessOverlay"]}>
-            <GoogleMap
-                mapContainerStyle={mapContainerStyle}
-                defaultCenter={MAP_CENTER}
-                defaultZoom={16}
-                onClick={handleMapClick}
-                onLoad={handleMapLoad}
-                onDblClick={onToggleExpand}
-                options={{
-                    streetViewControl: false,
-                    disableDoubleClickZoom: true,
-                    disableDefaultUI: true
-                }}
-            />
-            <button style={buttonStyle} onClick={onSubmitGuess}>
+        <aside className={panelClass}>
+            <div className={styles.guessPanelTitle}>Place your guess</div>
+            <MapModeToggle mode={mode} onChange={setMode} />
+            <div className={styles.guessMapWrap}>
+                {isLoaded ? (
+                    <GoogleMap
+                        mapContainerClassName={styles.guessMapCanvas}
+                        onClick={handleMapClick}
+                        onLoad={handleMapLoad}
+                        options={getMapOptions(mode)}
+                    />
+                ) : (
+                    <div className={styles.guessMapCanvas}>Loading map...</div>
+                )}
+                {isLoaded && <MapZoomButtons mapRef={mapInstanceRef} />}
+                {/* Small corner button so Shrink is always on the map, whatever its size */}
+                <button
+                    className={styles.mapSizeButton}
+                    onClick={onToggleExpand}
+                    title={isExpanded ? "Shrink map" : "Enlarge map"}
+                    aria-label={isExpanded ? "Shrink map" : "Enlarge map"}
+                >
+                    {isExpanded ? "⤡ Shrink" : "⤢ Enlarge"}
+                </button>
+            </div>
+            <div className={styles.mapModeHint}>{mapModeHint(mode)}</div>
+            <div className={styles.guessPanelActions}>
+                <button className={styles.guessPanelSmallButton} onClick={openInTab}>
+                    Open in tab ↗
+                </button>
+            </div>
+            <button className={styles.guessSubmitButton} onClick={onSubmitGuess}>
                 Submit guess!
             </button>
-        </div>
+        </aside>
     )
 }
 function useMapMarker(mapInstanceRef) {
     const markerInstanceRef = useRef(null)
 
-    const updateMarker = useCallback((position, shouldPan = true) => {
+    // Moves the guess marker without panning or zooming the map
+    const updateMarker = useCallback((position) => {
         if (!mapInstanceRef.current || !window.google?.maps) return
 
-        if (markerInstanceRef.current) {
-            markerInstanceRef.current.setMap(null)
+        if (!position || isDefaultPosition(position)) {
+            markerInstanceRef.current?.setMap(null)
             markerInstanceRef.current = null
+            return
         }
 
-        if (position && !isDefaultPosition(position)) {
+        if (markerInstanceRef.current) {
+            markerInstanceRef.current.setPosition(position)
+        } else {
             markerInstanceRef.current = new window.google.maps.Marker({
                 position,
                 map: mapInstanceRef.current,
                 title: 'Guess position',
-                animation: window.google.maps.Animation.DROP
+                clickable: false
             })
-
-            if (shouldPan) {
-                mapInstanceRef.current.panTo(position)
-                mapInstanceRef.current.setZoom(18)
-            }
         }
     }, [mapInstanceRef])
 

@@ -26,6 +26,7 @@ import { useRouter, usePathname } from "next/navigation"; // use for navigation 
 import { useAudio, useAudioVolumes } from "./AudioProvider";
 import { auth } from "./firebase-config";
 import { signOut, onAuthStateChanged } from "firebase/auth";
+import { SNOW_LEVEL_COUNTS } from "./Particles";
 export default function SettingsModal() {
   // useState allows the variable to be changed (i.e. allows the user to close/open menu)
   // use "open" to read the state and "setOpen" to set the state, false (closed) by default
@@ -127,12 +128,13 @@ export default function SettingsModal() {
   }, [musicPct, effectsPct, setMusicVolume, setEffectsVolume]);
   const commitSnow = useCallback(() => {
     try {
-      const levels = [0, 200, 600, 1200, 2000];
-      const count = levels[Math.max(0, Math.min(4, snowLevel))];
+      const count = SNOW_LEVEL_COUNTS[Math.max(0, Math.min(4, snowLevel))];
       localStorage.setItem("snowLevel", String(snowLevel));
       localStorage.setItem("snowParticles", String(count));
     } catch {}
   }, [snowLevel]);
+  // The pop-out guess map tab is just a map; settings stay in the game tab
+  if (pathname?.startsWith('/game/map')) return null;
   // change this stuff below, this is just so we have a way to actually open the settings for now
   return (
     <>
@@ -218,9 +220,8 @@ export default function SettingsModal() {
                   setSnowLevel(lvl);
                   // live update: write both level and mapped particle count
                   try {
-                    const levels = [0, 200, 600, 1200, 2000];
                     localStorage.setItem("snowLevel", String(lvl));
-                    localStorage.setItem("snowParticles", String(levels[lvl] ?? 600));
+                    localStorage.setItem("snowParticles", String(SNOW_LEVEL_COUNTS[lvl] ?? SNOW_LEVEL_COUNTS[2]));
                   } catch {}
                 }}
                 onPointerUp={commitSnow}

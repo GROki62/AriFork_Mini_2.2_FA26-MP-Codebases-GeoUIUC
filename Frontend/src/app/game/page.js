@@ -7,6 +7,7 @@ import styles from "./page.module.css"
 import { useAudio } from '@/components/AudioProvider'
 import ScoreScreen from './ScoreScreen.js'
 import GuessMap from './GuessMap.js'
+import { GUESS_MAP_CHANNEL } from './map/channel.js'
 import { auth, db} from '@/components/firebase-config.js'
 import { doc, updateDoc, increment, getDoc } from 'firebase/firestore'
 
@@ -48,9 +49,7 @@ function formatTimer(seconds) {
 }
 
 function calculateScore(distance, maxDistance = MAX_DISTANCE_IN_BOUNDS) {
-    console.log(maxDistance)
     const normalizedDistance = distance / maxDistance
-    console.log(normalizedDistance)
     return Math.max(0, Math.floor(MAX_SCORE * (1 - normalizedDistance)))
 }
 
@@ -150,6 +149,12 @@ function useStreetViewPanorama(isLoaded, panoramaRef) {
     const zoomIn = useCallback(() => adjustPanoramaZoom(1), [adjustPanoramaZoom])
     const zoomOut = useCallback(() => adjustPanoramaZoom(-1), [adjustPanoramaZoom])
 
+    // Tell Street View its container changed size (e.g. the guess panel was enlarged)
+    const refreshLayout = useCallback(() => {
+        const panorama = panoramaInstanceRef.current
+        if (panorama) window.google?.maps?.event?.trigger(panorama, 'resize')
+    }, [])
+
     useEffect(() => {
         if (!isLoaded || !window.google) return
 
@@ -160,7 +165,39 @@ function useStreetViewPanorama(isLoaded, panoramaRef) {
         findValidPanorama(point)
     }, [isLoaded, ensurePanoramaInitialized, findValidPanorama])
 
-    return { goalPoint, findValidPanorama, zoomIn, zoomOut }
+    return { goalPoint, findValidPanorama, zoomIn, zoomOut, refreshLayout }
+}
+
+// Keeps the pop-out map tab (/game/map) in sync with this game tab.
+// Messages: the tab sends "hello" when it opens and "guess" when clicked;
+// the game sends "state" with the current guess and whether guessing is open.
+function useGuessMapChannel(userGuess, active, onRemoteGuess) {
+    const channelRef = useRef(null)
+    const stateRef = useRef({ position: userGuess, active })
+    stateRef.current = { position: userGuess, active }
+    const onRemoteGuessRef = useRef(onRemoteGuess)
+    onRemoteGuessRef.current = onRemoteGuess
+
+    useEffect(() => {
+        if (typeof BroadcastChannel === 'undefined') return
+        const channel = new BroadcastChannel(GUESS_MAP_CHANNEL)
+        channelRef.current = channel
+        channel.onmessage = ({ data }) => {
+            if (data?.type === 'hello') {
+                channel.postMessage({ type: 'state', ...stateRef.current })
+            } else if (data?.type === 'guess' && stateRef.current.active) {
+                onRemoteGuessRef.current(data.position)
+            }
+        }
+        return () => {
+            channel.close()
+            channelRef.current = null
+        }
+    }, [])
+
+    useEffect(() => {
+        channelRef.current?.postMessage({ type: 'state', position: userGuess, active })
+    }, [userGuess, active])
 }
 
 function useTimer(initialSeconds, onTimeout) {
@@ -266,7 +303,7 @@ function UIOverlay({ timerText, currentRound }) {
     return (
         <div id={styles["overlay"]}>
             <Link href="/lobby">
-                <img src="./logo.png" style={{ maxHeight: "60px" }} alt="Logo" />
+                <img src="./logo.png" style={{ maxHeight: "60px" }} alt="Logo" draggable={false} />
             </Link>
             <div id={styles["timer"]}>{timerText}</div>
             <div id={styles["roundCounter"]}>Round {currentRound}</div>
@@ -301,8 +338,14 @@ export default function Gameplay() {
 
     const { playEffect, startScoreAdd, stopScoreAdd } = useAudio()
 
-    const { goalPoint, findValidPanorama, zoomIn, zoomOut } = useStreetViewPanorama(isLoaded, panoramaRef)
+    const { goalPoint, findValidPanorama, zoomIn, zoomOut, refreshLayout } = useStreetViewPanorama(isLoaded, panoramaRef)
     const gameLogic = useGameLogic(goalPoint)
+    useGuessMapChannel(gameLogic.userGuess, !showScoreScreen, gameLogic.setUserGuess)
+
+    // Street View gets wider/narrower when the guess panel resizes or hides
+    useEffect(() => {
+        refreshLayout()
+    }, [isMapExpanded, showScoreScreen, refreshLayout])
     const { seconds: timerSeconds, reset: resetTimer, formatted: timerText } = useTimer(
         INITIAL_TIMER_SECONDS,
         () => handleSubmitGuess()
@@ -344,14 +387,16 @@ export default function Gameplay() {
 
 
     return (
-        <div className={styles.umbrella} style={styles}>
-            <div
-                data-panorama-container
-                ref={panoramaRef}
-                style={{ width: "100vw", height: "100vh" }}
-            />
-            <UIOverlay timerText={timerText} currentRound={currentRound} />
-            <ControlOverlay onZoomIn={zoomIn} onZoomOut={zoomOut} />
+        <div className={styles.umbrella}>
+            <div className={styles.streetViewArea}>
+                <div
+                    data-panorama-container
+                    ref={panoramaRef}
+                    style={{ width: "100%", height: "100%" }}
+                />
+                <UIOverlay timerText={timerText} currentRound={currentRound} />
+                <ControlOverlay onZoomIn={zoomIn} onZoomOut={zoomOut} />
+            </div>
             {!showScoreScreen && (
                 <GuessMap
                     isLoaded={isLoaded}
@@ -360,7 +405,6 @@ export default function Gameplay() {
                     isExpanded={isMapExpanded}
                     onToggleExpand={() => setIsMapExpanded(prev => !prev)}
                     onSubmitGuess={handleSubmitGuess}
-                    options={{ disableDefaultUI: true }}
                 />
             )}
             <ScoreScreen
